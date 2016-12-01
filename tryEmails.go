@@ -4,7 +4,6 @@ import "net/textproto"
 import "errors"
 
 import "strings"
-import "net"
 
 func checkResponse(conn *textproto.Conn, request string, code int) error {
 	if request != "" {
@@ -19,33 +18,6 @@ func checkResponse(conn *textproto.Conn, request string, code int) error {
 	if err != nil {
 		return errors.New("Did not get intended response (" + string(code) + "): " + err.Error())
 	}
-	return nil
-}
-
-// VerifyEmail takes an email and checks whether the related MX server for the host agrees that it exists.
-func VerifyEmail(email string) error {
-	host := strings.Split(email, "@")[1]
-
-	res, err := net.LookupMX(host)
-	if err != nil {
-		return errors.New("Incorrect Host Address")
-	}
-	mxServer := strings.TrimRight(res[0].Host, ".")
-	conn, err := textproto.Dial("tcp", mxServer+":25")
-	if err != nil {
-		return err
-	}
-
-	defer conn.Close()
-
-	if err := setupMX(conn, email); err != nil {
-		return err
-	}
-
-	if err := checkResponse(conn, "rcpt to: <"+email+">", 250); err != nil {
-		return errors.New("Recipient " + email + " invalid: " + err.Error())
-	}
-
 	return nil
 }
 
