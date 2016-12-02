@@ -11,7 +11,6 @@ func findMailServer(companyName string) (string, *net.MX, error) {
 	tlds := []string{".co.uk", ".com", ".net", ".org"} // TODO: Expand this list.
 	var ci []string
 	var cn []string
-	var err error
 	companyWords := strings.Split(companyName, " ")
 	for _, w := range companyWords {
 		ci = append(ci, fmt.Sprint(w[0]))
@@ -32,5 +31,5 @@ func findMailServer(companyName string) (string, *net.MX, error) {
 			return initialHost, iRes[0], nil
 		}
 	}
-	return "", nil, errors.New(err.Error() + ": No MX records for company name or initials")
+	return "", nil, errors.New("No MX records for company name or initials: " + companyName)
 }

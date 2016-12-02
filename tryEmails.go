@@ -65,5 +65,8 @@ func tryEmails(firstName string, lastName string, companyName string) ([]string,
 		foundEmails = append(foundEmails, e)
 	}
 
-	return foundEmails, nil
+	if len(foundEmails) > 0 {
+		return foundEmails, nil
+	}
+	return []string{}, errors.New("Nothing Found!")
 }
