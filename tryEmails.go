@@ -37,32 +37,40 @@ func setupMX(conn *textproto.Conn, fromEmail string) error {
 }
 
 func tryEmails(firstName string, lastName string, companyName string) ([]string, error) {
-	ms, mx, err := findMailServer(companyName)
+	potentialEmails := []string{}
+	mx, err := findMailServer(companyName)
 	if err != nil {
 		return []string{}, err
 	}
-
-	potentialEmails := generateEmails(firstName, lastName, ms)
-	foundEmails := []string{}
-	mxHost := strings.TrimRight(mx.Host, ".")
-
-	conn, err := textproto.Dial("tcp", mxHost+":25")
-	if err != nil {
-		return []string{}, err
-	}
-
-	defer conn.Close()
-
-	if err := setupMX(conn, potentialEmails[0]); err != nil {
-		return []string{}, err
-	}
-
-	for _, e := range potentialEmails {
-
-		if err := checkResponse(conn, "rcpt to: <"+e+">", 250); err != nil {
-			continue
+	for s := range mx {
+		for _, email := range generateEmails(firstName, lastName, s) {
+			potentialEmails = append(potentialEmails, email)
 		}
-		foundEmails = append(foundEmails, e)
+	}
+
+	foundEmails := []string{}
+
+	for server, host := range mx {
+		mxHost := strings.TrimRight(host.Host, ".")
+		conn, err := textproto.Dial("tcp", mxHost+":25")
+		if err != nil {
+			return []string{}, err
+		}
+
+		defer conn.Close()
+
+		if err := setupMX(conn, potentialEmails[0]); err != nil {
+			return []string{}, err
+		}
+
+		for _, e := range potentialEmails {
+			if strings.Contains(e, server) {
+				if err := checkResponse(conn, "rcpt to: <"+e+">", 250); err != nil {
+					continue
+				}
+				foundEmails = append(foundEmails, e)
+			}
+		}
 	}
 
 	if len(foundEmails) > 0 {
