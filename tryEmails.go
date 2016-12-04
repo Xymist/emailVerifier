@@ -1,7 +1,10 @@
 package emailVerifier
 
-import "net/textproto"
-import "errors"
+import (
+	"errors"
+	"log"
+	"net/textproto"
+)
 
 import "strings"
 
@@ -54,13 +57,15 @@ func tryEmails(firstName string, lastName string, companyName string) ([]string,
 		mxHost := strings.TrimRight(host.Host, ".")
 		conn, err := textproto.Dial("tcp", mxHost+":25")
 		if err != nil {
-			return []string{}, err
+			log.Println(err.Error())
+			continue
 		}
 
 		defer conn.Close()
 
 		if err := setupMX(conn, potentialEmails[0]); err != nil {
-			return []string{}, err
+			log.Println(err.Error())
+			continue
 		}
 
 		for _, e := range potentialEmails {
