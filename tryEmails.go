@@ -2,42 +2,10 @@ package emailVerifier
 
 import (
 	"errors"
-	"log"
-	"net/textproto"
+	"fmt"
+	"net"
+	"strings"
 )
-
-import "strings"
-
-func checkResponse(conn *textproto.Conn, request string, code int) error {
-	if request != "" {
-		req, err := conn.Cmd(request)
-		if err != nil {
-			return errors.New("Command not accepted: " + request)
-		}
-		conn.StartResponse(req)
-		defer conn.EndResponse(req)
-	}
-	_, _, err := conn.ReadCodeLine(code)
-	if err != nil {
-		return errors.New("Did not get intended response (" + string(code) + "): " + err.Error())
-	}
-	return nil
-}
-
-func setupMX(conn *textproto.Conn, fromEmail string) error {
-	if err := checkResponse(conn, "", 220); err != nil {
-		return errors.New("Could not establish connection: " + err.Error())
-	}
-
-	if err := checkResponse(conn, "HELO HI", 250); err != nil {
-		return errors.New("Did not receive HELO response: " + err.Error())
-	}
-
-	if err := checkResponse(conn, "mail from: <"+fromEmail+">", 250); err != nil {
-		return errors.New("Mail from " + fromEmail + " not accepted: " + err.Error())
-	}
-	return nil
-}
 
 func tryEmails(firstName string, lastName string, companyName string) ([]string, error) {
 	potentialEmails := []string{}
@@ -52,34 +20,63 @@ func tryEmails(firstName string, lastName string, companyName string) ([]string,
 	}
 
 	foundEmails := []string{}
-
-	for server, host := range mx {
-		mxHost := strings.TrimRight(host.Host, ".")
-		conn, err := textproto.Dial("tcp", mxHost+":25")
-		if err != nil {
-			log.Println(err.Error())
+	for _, e := range potentialEmails {
+		//TODO: This step is slow, switch to using goroutines and a channel.
+		if err := VerifyEmail(e); err != nil {
 			continue
 		}
-
-		defer conn.Close()
-
-		if err := setupMX(conn, potentialEmails[0]); err != nil {
-			log.Println(err.Error())
-			continue
-		}
-
-		for _, e := range potentialEmails {
-			if strings.Contains(e, server) {
-				if err := checkResponse(conn, "rcpt to: <"+e+">", 250); err != nil {
-					continue
-				}
-				foundEmails = append(foundEmails, e)
-			}
-		}
+		foundEmails = append(foundEmails, e)
 	}
 
 	if len(foundEmails) > 0 {
 		return foundEmails, nil
 	}
 	return []string{}, errors.New("Nothing Found!")
+}
+
+func generateEmails(firstName string, lastName string, mailserver string) []string {
+	firstInitial := fmt.Sprint(string(firstName[0]))
+	emailAddresses := []string{
+		firstName + "." + lastName + "@" + mailserver,
+		firstInitial + lastName + "@" + mailserver,
+		lastName + firstInitial + "@" + mailserver,
+		firstName + lastName + "@" + mailserver,
+		firstName + "@" + mailserver}
+
+	return emailAddresses
+}
+
+func findMailServer(companyName string) (map[string]*net.MX, error) {
+	tlds := []string{".co.uk", ".com", ".net", ".org", ".io"} // TODO: Expand this list.
+	var ci []string
+	var cn []string
+	companyWords := strings.Split(companyName, " ")
+	for _, w := range companyWords {
+		if len(w) > 0 {
+			ci = append(ci, fmt.Sprint(w[0]))
+		}
+		cn = append(cn, w)
+	}
+	companyInitials := strings.Join(ci, "")
+	flatCompanyName := strings.Join(cn, "")
+	hosts := map[string]*net.MX{}
+
+	for _, t := range tlds {
+		nameHost := strings.Join([]string{flatCompanyName, t}, "")
+		initialHost := strings.Join([]string{companyInitials, t}, "")
+		res, err := net.LookupMX(nameHost)
+		if err == nil {
+			hosts[nameHost] = res[0]
+		}
+		iRes, err := net.LookupMX(initialHost)
+		if err == nil {
+			hosts[initialHost] = iRes[0]
+		}
+	}
+
+	if len(hosts) > 0 {
+		return hosts, nil
+	}
+
+	return map[string]*net.MX{}, errors.New("No MX records for company name or initials: " + companyName)
 }

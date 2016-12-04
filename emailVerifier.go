@@ -40,6 +40,7 @@ func VerifyEmail(email string) error {
 	if err != nil {
 		return errors.New("Incorrect Host Address")
 	}
+
 	mxServer := strings.TrimRight(res[0].Host, ".")
 	conn, err := textproto.Dial("tcp", mxServer+":25")
 	if err != nil {
@@ -56,5 +57,36 @@ func VerifyEmail(email string) error {
 		return errors.New("Recipient " + email + " invalid: " + err.Error())
 	}
 
+	return nil
+}
+
+func setupMX(conn *textproto.Conn, fromEmail string) error {
+	if err := checkResponse(conn, "", 220); err != nil {
+		return errors.New("Could not establish connection: " + err.Error())
+	}
+
+	if err := checkResponse(conn, "HELO hello.com", 250); err != nil {
+		return errors.New("Did not receive HELO response: " + err.Error())
+	}
+
+	if err := checkResponse(conn, "mail from: <"+fromEmail+">", 250); err != nil {
+		return errors.New("Mail from " + fromEmail + " not accepted: " + err.Error())
+	}
+	return nil
+}
+
+func checkResponse(conn *textproto.Conn, request string, code int) error {
+	if request != "" {
+		req, err := conn.Cmd(request)
+		if err != nil {
+			return errors.New("Command not accepted: " + request)
+		}
+		conn.StartResponse(req)
+		defer conn.EndResponse(req)
+	}
+	_, _, err := conn.ReadCodeLine(code)
+	if err != nil {
+		return errors.New("Did not get expected response code (" + string(code) + "); error: " + err.Error())
+	}
 	return nil
 }
